@@ -214,7 +214,7 @@ enum SwiftyRSA {
      Example of key with X509 header (notice the additional ASN.1 sequence):
      https://lapo.it/asn1js/#30819F300D06092A864886F70D010101050003818D0030818902818100D0674615A252ED3D75D2A3073A0A8A445F3188FD3BEB8BA8584F7299E391BDEC3427F287327414174997D147DD8CA62647427D73C9DA5504E0A3EED5274A1D50A1237D688486FADB8B82061675ABFA5E55B624095DB8790C6DBCAE83D6A8588C9A6635D7CF257ED1EDE18F04217D37908FD0CBB86B2C58D5F762E6207FF7B92D0203010001
      */
-    static func stripPublicKeyHeader(keyData: Data) throws -> Data {
+    static func stripKeyHeader(keyData: Data) throws -> Data {
         let count = keyData.count / MemoryLayout<CUnsignedChar>.size
         
         guard count > 0 else {
@@ -238,8 +238,10 @@ enum SwiftyRSA {
         
         // If current byte marks an integer (0x02), it means the key doesn't have a X509 header and just
         // contains its modulo & public exponent. In this case, we can just return the provided DER data as is.
-        if Int(byteArray[index]) == 0x02 {
+        if Int(byteArray[index]) == 0x02 && Int(byteArray[index + 3]) != 0x30 {
             return keyData
+        } else if Int(byteArray[index]) == 0x02 {
+            index += 3
         }
         
         // Now that we've excluded the possibility of headerless key, we're looking for a valid X509 header sequence.
@@ -250,22 +252,26 @@ enum SwiftyRSA {
         }
         
         index += 15
-        if byteArray[index] != 0x03 {
+        if Int(byteArray[index]) != 0x03 && Int(byteArray[index]) != 0x04 {
             throw SwiftyRSAError(message: "Invalid byte at index \(index - 1) (\(byteArray[index - 1])) for public key header")
         }
-        
-        index += 1
-        if byteArray[index] > 0x80 {
-            index += Int(byteArray[index]) - 0x80 + 1
+
+        if Int(byteArray[index]) == 0x04 {
+            index += 4
         } else {
             index += 1
+            if Int(byteArray[index]) > 0x80 {
+                index += Int(byteArray[index]) - 0x80 + 1
+            } else {
+                index += 1
+            }
+            
+            guard Int(byteArray[index]) == 0 else {
+                throw SwiftyRSAError(message: "Invalid byte at index \(index - 1) (\(byteArray[index - 1])) for public key header")
+            }
+            
+            index += 1
         }
-        
-        guard byteArray[index] == 0 else {
-            throw SwiftyRSAError(message: "Invalid byte at index \(index - 1) (\(byteArray[index - 1])) for public key header")
-        }
-        
-        index += 1
         
         let strippedKeyBytes = [UInt8](byteArray[index...keyData.count - 1])
         let data = Data(bytes: UnsafePointer<UInt8>(strippedKeyBytes), count: keyData.count - index)

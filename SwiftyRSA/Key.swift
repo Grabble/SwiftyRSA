@@ -81,7 +81,7 @@ public protocol Key {
         self.tag = tag
         
         self.originalData = data
-        let dataWithoutHeader = try SwiftyRSA.stripPublicKeyHeader(keyData: data)
+        let dataWithoutHeader = try SwiftyRSA.stripKeyHeader(keyData: data)
         
     	reference = try SwiftyRSA.addKey(dataWithoutHeader, isPublic: true, tag: tag)
     }
@@ -248,8 +248,11 @@ public protocol Key {
     required public init(data: Data) throws {
         self.originalData = data
         let tag = UUID().uuidString
+
+        let dataWithoutHeader = try SwiftyRSA.stripKeyHeader(keyData: data)
+
         self.tag = tag
-        reference = try SwiftyRSA.addKey(data, isPublic: false, tag: tag)
+        reference = try SwiftyRSA.addKey(dataWithoutHeader, isPublic: false, tag: tag)
     }
     
     /// Creates a private key with a base64-encoded string.
